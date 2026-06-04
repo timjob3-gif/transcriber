@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Транскрибатор</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0e0e0e;
+      --surface: #1a1a1a;
+      --border:  #2a2a2a;
+      --accent:  #7c6af7;
+      --text:    #e8e8e8;
+      --muted:   #666;
+      --success: #4ade80;
+      --error:   #f87171;
+      --radius:  10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .logo { font-weight: 600; font-size: 15px; }
+    .logo span { color: var(--accent); }
+    .hint { color: var(--muted); font-size: 12px; }
+    kbd {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11px;
+      font-family: inherit;
+    }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    /* ── Drop zone ── */
+    @keyframes pulseBorder {
+      0%,100% { border-color: var(--accent); box-shadow: 0 0 0 0 rgba(124,106,247,0.4); }
+      50%      { border-color: #a090ff;      box-shadow: 0 0 0 4px rgba(124,106,247,0); }
+    }
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 24px 24px 18px;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+      flex-shrink: 0;
+      position: relative;
+    }
+    #drop-zone:hover { border-color: #555; }
+    #drop-zone.drag-over {
+      animation: pulseBorder 1s ease infinite;
+      background: rgba(124,106,247,0.07);
+    }
+    /* overlay "отпустить" поверх содержимого при drag */
+    #drop-release-hint {
+      display: none;
+      position: absolute; inset: 0;
+      border-radius: var(--radius);
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--accent);
+      background: rgba(18,18,20,0.72);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+    }
+    #drop-zone.drag-over #drop-release-hint { display: flex; }
+    /* compact state — когда в очереди есть задачи */
+    #drop-zone.compact { padding: 8px 16px; }
+    #drop-zone.compact #drop-zone-hit { display: none; }
+    .compact-pick-btn { display: none; }
+    #drop-zone.compact .compact-pick-btn { display: inline-flex !important; }
+    #drop-zone-hit {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 14px;
+      cursor: default;
+    }
+    .drop-icon { font-size: 28px; margin-bottom: 4px; }
+    .drop-hint  { color: var(--muted); font-size: 13px; }
+    .drop-btn   { padding: 9px 28px; font-size: 14px; margin: 4px 0; }
+    .drop-formats { color: var(--muted); font-size: 10px; letter-spacing: 0.05em; margin-top: 4px; opacity: 0.55; }
+
+    /* ── URL row ── */
+    .url-row {
+      display: flex;
+      gap: 8px;
+    }
+    .url-row input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-row input:focus { border-color: var(--accent); }
+    .url-row input::placeholder { color: var(--muted); }
+
+    /* ── Buttons ── */
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { opacity: 0.7; }
+    .btn.ghost {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn.ghost:hover { border-color: #555; }
+    .btn.small {
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 5px;
+    }
+
+    /* ── Queue ── */
+    #queue {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #queue:empty::after {
+      content: 'Добавь файл или YouTube-ссылку';
+      display: block;
+      text-align: center;
+      color: var(--muted);
+      padding-top: 20px;
+      font-size: 13px;
+    }
+
+    .job {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .job-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .job-name {
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+    }
+    .job-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .job-status { font-size: 11px; color: var(--muted); }
+    .job-status.done  { color: var(--success); }
+    .job-status.error { color: var(--error); }
+    .job-timer {
+      font-size: 11px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-family: 'Consolas', monospace;
+      white-space: nowrap;
+    }
+    .job-eta { color: var(--accent); }
+
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.3s;
+      position: relative;
+    }
+    /* shimmer wave on fill when running */
+    .job.running .progress-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg,
+        transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+      background-size: 200% 100%;
+      animation: progress-shimmer 1.4s linear infinite;
+    }
+    @keyframes progress-shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .job-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      max-height: 48px;
+      overflow: hidden;
+    }
+
+    /* путь к результату */
+    .job-result {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(74,222,128,0.07);
+      border: 1px solid rgba(0,200,100,0.25);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .job-result .result-path {
+      flex: 1;
+      color: var(--success);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'Consolas', monospace;
+    }
+
+    .job-error {
+      font-size: 12px;
+      color: var(--error);
+      background: rgba(248,113,113,0.07);
+      border: 1px solid rgba(248,113,113,0.2);
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+
+    /* ── Command palette ── */
+    #palette-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 100px;
+    }
+    #palette-overlay.open { display: flex; }
+
+    #palette {
+      background: var(--surface);
+      border: 1px solid #333;
+      border-radius: 12px;
+      width: 460px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    }
+    #palette-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      padding: 13px 16px;
+      font-size: 15px;
+      outline: none;
+      font-family: inherit;
+    }
+    #palette-list { list-style: none; max-height: 260px; overflow-y: auto; }
+    #palette-list li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    #palette-list li:hover,
+    #palette-list li.active { background: rgba(124,106,247,0.15); }
+    #palette-list li .cmd-icon { font-size: 15px; width: 20px; text-align: center; }
+    #palette-list li .cmd-label { flex: 1; font-size: 13px; }
+    #palette-list li .cmd-hint { font-size: 11px; color: var(--muted); }
+
+    /* ── Settings modal ── */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #settings-overlay.open { display: flex; }
+    #settings-box {
+      background: var(--surface);
+      border: 1px solid #333;
+      border-radius: 12px;
+      width: 380px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+    .settings-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600; font-size: 14px;
+    }
+    .settings-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .settings-row { display: flex; flex-direction: column; gap: 5px; }
+    .settings-row label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .settings-row select,
+    .settings-row input[type="text"] {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 8px 10px; font-size: 13px; font-family: inherit; outline: none;
+      width: 100%;
+    }
+    .settings-row select:focus,
+    .settings-row input[type="text"]:focus { border-color: var(--accent); }
+    .settings-row input[type="text"]::placeholder { color: var(--muted); }
+    .settings-folder-row { display: flex; gap: 6px; align-items: center; }
+    .settings-folder-row input { flex: 1; min-width: 0; }
+    .settings-footer {
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    /* ── GPU chip ── */
+    #gpu-chip {
+      display: none;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    #gpu-chip.cuda { color: var(--success); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.06); }
+
+  /* ── Viewer panel ── */
+  #viewer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 90;
+  }
+  #viewer-overlay.open { display: block; }
+  #viewer-panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 400px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+  }
+  #viewer-overlay.open #viewer-panel {
+    animation: slideInRight 0.22s ease-out;
+  }
+  @keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+  }
+  .viewer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .viewer-title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+  #viewer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .viewer-seg {
+    display: flex;
+    gap: 10px;
+    padding: 7px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    line-height: 1.55;
+    cursor: default;
+  }
+  .viewer-seg:hover { background: rgba(255,255,255,0.03); }
+  .viewer-ts {
+    color: var(--accent);
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    flex-shrink: 0;
+    padding-top: 2px;
+    opacity: 0.8;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.15s;
+  }
+  .viewer-ts:hover { opacity: 1; text-decoration: underline; }
+  .viewer-text { font-size: 13px; color: var(--text); }
+  .viewer-empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 20px;
+  }
+
+  /* ── Анимации карточек ── */
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes flashGreen {
+    0%   { box-shadow: 0 0 0 0   rgba(74,222,128,0); }
+    25%  { box-shadow: 0 0 0 6px rgba(74,222,128,0.4); }
+    100% { box-shadow: 0 0 0 0   rgba(74,222,128,0); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-6px); }
+    40%      { transform: translateX( 6px); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX( 4px); }
+  }
+  .job.slide-in  { animation: slideIn   0.22s ease-out; }
+  .job.anim-done { animation: flashGreen 0.75s ease-out; }
+  .job.anim-err  { animation: shake      0.38s ease-out; }
+
+  /* ── Stage loading indicator ── */
+  .job-stage-loading {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: pulse-muted 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse-muted {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  /* ── Skeleton loader ── */
+  .skeleton-lines { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 2px; }
+  .skeleton-line {
+    height: 10px; border-radius: 5px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease infinite;
+  }
+  @keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ── Debug panel ── */
+  #debug-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #111;
+    border-top: 1px solid #2a2a2a;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    z-index: 200;
+  }
+  #debug-toggle {
+    padding: 3px 10px;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    user-select: none;
+  }
+  #debug-toggle:hover { color: var(--text); }
+  #debug-log {
+    display: none;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 4px 10px 6px;
+  }
+  #debug-log.open { display: block; }
+  .dline { padding: 1px 0; color: #888; }
+  .dline.error { color: var(--error); }
+  .dline.ok { color: var(--success); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>◈</span> Транскрибатор</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="gpu-chip" title="Транскрипция на процессоре (GPU не найден)">⬤ CPU</span>
+    <button class="btn ghost small" onclick="openSettings()" title="Настройки">⚙️</button>
+    <button class="btn ghost small" onclick="openPalette()" title="Команды (Ctrl+K)">⋯</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Drop zone -->
+  <div id="drop-zone">
+    <div id="drop-release-hint">⬇ Отпустить для добавления</div>
+    <div id="drop-zone-hit">
+      <div class="drop-icon">🎬</div>
+      <p class="drop-hint">Перетащи файл сюда или</p>
+      <button class="btn drop-btn" onclick="openFilePicker()">📂 Выбрать файл</button>
+      <p class="drop-formats">MP4 · MKV · AVI · MOV · MP3 · WAV · M4A · FLAC</p>
+    </div>
+    <div class="url-row" onclick="event.stopPropagation()">
+      <button class="btn ghost small compact-pick-btn" onclick="openFilePicker()" title="Выбрать файл">📂</button>
+      <input id="url-input" type="text"
+             placeholder="https://youtube.com/watch?v=..."
+             onkeydown="if(event.key==='Enter') addUrl()" />
+      <button class="btn" onclick="addUrl()">Добавить</button>
+    </div>
+  </div>
+
+  <div id="queue"></div>
+
+</main>
+
+<!-- Settings modal -->
+<div id="settings-overlay" onclick="if(event.target===this) closeSettings()">
+  <div id="settings-box">
+    <div class="settings-header">
+      <span>⚙️ Настройки</span>
+      <button class="btn ghost small" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-row">
+        <label>Модель Whisper</label>
+        <select id="set-model">
+          <option value="tiny">tiny — быстро, менее точно (~1 ГБ)</option>
+          <option value="base">base — баланс (~1.5 ГБ)</option>
+          <option value="medium">medium (~3 ГБ)</option>
+          <option value="large-v3">large-v3 — максимум точности (~3 ГБ)</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>Язык аудио</label>
+        <select id="set-language">
+          <option value="">Авто-определение</option>
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="uk">Українська</option>
+          <option value="zh">中文</option>
+        </select>
+      </div>
+    </div>
+      <div class="settings-row">
+        <label>Папка вывода</label>
+        <div class="settings-folder-row">
+          <input id="set-output" type="text"
+                 placeholder="По умолчанию: Documents/Транскрибатор/output" />
+          <button class="btn ghost small" onclick="browseOutputFolder()">Обзор</button>
+          <button class="btn ghost small" onclick="document.getElementById('set-output').value=''" title="Сбросить">✕</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="btn ghost" onclick="closeSettings()">Отмена</button>
+      <button class="btn" onclick="saveSettings()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Command palette -->
+<div id="palette-overlay" onclick="if(event.target===this) closePalette()">
+  <div id="palette">
+    <input id="palette-input" type="text" placeholder="Команда..."
+           oninput="filterCommands()" onkeydown="paletteKey(event)" />
+    <ul id="palette-list"></ul>
+  </div>
+</div>
+
+<!-- Debug panel -->
+<div id="debug-panel">
+  <div id="debug-toggle" onclick="toggleDebug()">
+    <span>🐛 Debug</span><span id="debug-count">0 событий</span>
+  </div>
+  <div id="debug-log"></div>
+</div>
+
+<!-- Viewer panel -->
+<div id="viewer-overlay" onclick="if(event.target===this)closeViewer()">
+  <div id="viewer-panel">
+    <div class="viewer-header">
+      <span class="viewer-title" id="viewer-title">—</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        <button class="btn ghost small" onclick="copyAllText()">📋 Копировать</button>
+        <button class="btn ghost small" onclick="closeViewer()">✕</button>
+      </div>
+    </div>
+    <div id="viewer-body"></div>
+  </div>
+</div>
+
+<!-- file-input оставляем как fallback для браузерного демо-режима -->
+<input id="file-input" type="file" multiple
+       accept="video/*,audio/*,.mp4,.mkv,.avi,.mov,.mp3,.wav,.m4a,.ogg,.flac"
+       style="display:none"
+       onchange="[...this.files].forEach(f => { const id=String(Date.now()+Math.random()); addJob(id,f.name); if(!_tauriAvail) mockProgress(id,f.name); }); this.value='';" />
+
+<script>
+  // ── Debug ─────────────────────────────────────────────────────────────
+  const _debugMode = location.search.includes('debug');
+  if (!_debugMode) document.getElementById('debug-panel').style.display = 'none';
+
+  let _dbgCount = 0;
+
+  window.onerror = (msg, src, line, col, err) => {
+    console.error('[onerror]', msg, line, col);
+    dbg(`JS ERROR: ${msg} (${line}:${col})`, 'error');
+    return false;
+  };
+
+  // Прямой лог при запуске скрипта
+  console.log('[INIT] script start, __TAURI_INTERNALS__:', typeof window.__TAURI_INTERNALS__);
+
+  function dbg(msg, level) {
+    _dbgCount++;
+    console.log('[dbg]', msg);
+    const countEl = document.getElementById('debug-count');
+    if (countEl) countEl.textContent = _dbgCount + ' событий';
+    const logEl = document.getElementById('debug-log');
+    if (!logEl) return;
+    const el = document.createElement('div');
+    el.className = 'dline' + (level === 'error' ? ' error' : level === 'ok' ? ' ok' : '');
+    el.textContent = new Date().toLocaleTimeString('ru', {hour12:false}) + '  ' + msg;
+    logEl.appendChild(el);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function toggleDebug() {
+    const panel = document.getElementById('debug-log');
+    if (panel) panel.classList.toggle('open');
+  }
+
+  // ── Tauri v2 API ─────────────────────────────────────────────────────
+  // NOTE: не используем имя isTauri — Tauri сам инжектит переменную с таким именем
+  const _tauriAvail = typeof window.__TAURI_INTERNALS__ !== 'undefined';
+  dbg('_tauriAvail=' + _tauriAvail);
+
+  async function tauriInvoke(cmd, args) {
+    if (!_tauriAvail) return;
+    dbg(`invoke → ${cmd}`);
+    try {
+      const r = await window.__TAURI_INTERNALS__.invoke(cmd, args);
+      dbg(`invoke ✓ ${cmd}`);
+      return r;
+    } catch (e) {
+      dbg(`invoke ✗ ${cmd}: ${e}`, 'error');
+    }
+  }
+
+  // Tauri v2: listen реализован через invoke('plugin:event|listen')
+  async function tauriListen(event, cb) {
+    if (!_tauriAvail) return;
+    dbg(`listen → ${event}`);
+    try {
+      const handlerId = window.__TAURI_INTERNALS__.transformCallback(cb);
+      await window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {
+        event,
+        target: { kind: 'Any' },
+        handler: handlerId,
+      });
+      dbg(`listen ✓ ${event}`);
+    } catch (e) {
+      dbg(`listen ✗ ${event}: ${e}`, 'error');
+    }
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────────
+  function loadSettings() {
+    return {
+      model:    localStorage.getItem('model')    || 'large-v3',
+      language: localStorage.getItem('language') || '',
+      output:   localStorage.getItem('output')   || '',
+    };
+  }
+  function openSettings() {
+    const s = loadSettings();
+    document.getElementById('set-model').value    = s.model;
+    document.getElementById('set-language').value = s.language;
+    document.getElementById('set-output').value   = s.output;
+    document.getElementById('settings-overlay').classList.add('open');
+  }
+  function closeSettings() {
+    document.getElementById('settings-overlay').classList.remove('open');
+  }
+  function saveSettings() {
+    localStorage.setItem('model',    document.getElementById('set-model').value);
+    localStorage.setItem('language', document.getElementById('set-language').value);
+    localStorage.setItem('output',   document.getElementById('set-output').value.trim());
+    closeSettings();
+    dbg('settings saved: model=' + localStorage.getItem('model') + ' output=' + (localStorage.getItem('output')||'default'), 'ok');
+  }
+  async function browseOutputFolder() {
+    const path = await tauriInvoke('pick_folder');
+    if (path) document.getElementById('set-output').value = path;
+  }
+
+  // ── Jobs ──────────────────────────────────────────────────────────────
+  const jobs = {};
+  let _gpuDevice = 'cpu';       // обновляется из gpu_info
+  const _pendingQueue = [];     // ожидают запуска (CPU-режим)
+  let _activeCount = 0;         // сколько Python-процессов работает
+
+  function _startOrQueue(id, input, output, model, language) {
+    if (_gpuDevice === 'cuda' || _activeCount === 0) {
+      _activeCount++;
+      tauriInvoke('start_job', { id, input, output, model, language });
+    } else {
+      _pendingQueue.push({ id, input, output, model, language });
+      dbg(`в очереди (CPU): ${input.split(/[\\/]/).pop()}`);
+    }
+  }
+
+  function _onJobFinished() {
+    _activeCount = Math.max(0, _activeCount - 1);
+    if (_pendingQueue.length > 0 && (_gpuDevice === 'cuda' || _activeCount === 0)) {
+      const next = _pendingQueue.shift();
+      _activeCount++;
+      dbg(`запуск из очереди: ${next.input.split(/[\\/]/).pop()}`);
+      tauriInvoke('start_job', next);
+    }
+  }
+
+  function fmtTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  // Обрезка длинного имени через середину: "Screen recording…(1).mp3"
+  function midTrunc(s, max) {
+    max = max || 40;
+    if (!s || s.length <= max) return s;
+    const half = Math.floor((max - 1) / 2);
+    return s.slice(0, half) + '…' + s.slice(-(max - half - 1));
+  }
+
+  function addJob(id, name, inputPath) {
+    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null };
+    renderJob(id);
+    document.getElementById('drop-zone').classList.add('compact');
+  }
+
+  // Живой таймер — обновляет только текстовый узел, без перерисовки всей карточки
+  setInterval(() => {
+    Object.values(jobs).forEach(job => {
+      if (job.status !== 'running' && job.status !== 'pending') return;
+
+      // Обновляем скорость транскрипции
+      if (job.transcribeStart && job.lastSegEnd > 0) {
+        const elapsedSec = (Date.now() - job.transcribeStart) / 1000;
+        if (elapsedSec > 1) job.speed = job.lastSegEnd / elapsedSec;
+      }
+
+      const el = document.getElementById('timer-' + job.id);
+      if (!el) return;
+      const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+      let txt = fmtTime(elapsed);
+      if (job.status === 'running' && job.percent > 3) {
+        const etaSec = Math.round(elapsed * (100 - job.percent) / job.percent);
+        txt += `  <span class="job-eta">ETA ${fmtTime(etaSec)}</span>`;
+      }
+      el.innerHTML = txt;
+    });
+  }, 1000);
+
+  function renderJob(id) {
+    const job = jobs[id];
+    const queue = document.getElementById('queue');
+
+    let el = document.getElementById('job-' + id);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'job slide-in';
+      el.id = 'job-' + id;
+      queue.prepend(el);
+      setTimeout(() => el.classList.remove('slide-in'), 300);
+    }
+    // Держим статус на корневом элементе — нужен для CSS-селекторов типа .job.running
+    el.dataset.status = job.status;
+    el.classList.remove('running','done','error','pending');
+    el.classList.add(job.status);
+
+    const pct = job.percent;
+    const fillColor = job.status === 'done' ? 'var(--success)' : job.status === 'error' ? 'var(--error)' : 'var(--accent)';
+
+    let resultBlock = '';
+    if (job.status === 'done' && job.outputPath) {
+      const fmtBtns = [
+        job.txtPath ? `<button class="btn ghost small" onclick="openInExplorer('${id}','txt')" title="Чистый текст">TXT</button>` : '',
+        job.srtPath ? `<button class="btn ghost small" onclick="openInExplorer('${id}','srt')" title="Субтитры SRT">SRT</button>` : '',
+        job.vttPath ? `<button class="btn ghost small" onclick="openInExplorer('${id}','vtt')" title="WebVTT для видео">VTT</button>` : '',
+      ].join('');
+      resultBlock = `
+        <div class="job-result">
+          <button class="btn ghost small" onclick="openViewer('${id}')" title="Читать текст транскрипции">👁</button>
+          <button class="btn ghost small" onclick="copyTranscript('${id}')" title="Скопировать текст транскрипции">📋 Текст</button>
+          ${fmtBtns}
+          <button class="btn ghost small" onclick="openInExplorer('${id}')" title="Открыть папку в проводнике">📂</button>
+        </div>`;
+    } else if (job.status === 'error' && job.errorMsg) {
+      const retryBtn = job.input
+        ? `<button class="btn ghost small" onclick="retryJob('${id}')">↻ Повторить</button>`
+        : '';
+      resultBlock = `
+        <div class="job-error" style="display:flex;align-items:center;gap:8px;">
+          <span style="flex:1">Ошибка: ${job.errorMsg}</span>
+          ${retryBtn}
+        </div>`;
+    }
+
+    const lastSegments = job.segments.slice(-2).map(s => s.text).join(' ');
+
+    const elapsed = Math.floor((Date.now() - (job.startTime || Date.now())) / 1000);
+    const timerInit = (job.status === 'done' || job.status === 'error')
+      ? fmtTime(elapsed) : '';
+
+    el.innerHTML = `
+      <div class="job-header">
+        <div class="job-name" title="${job.name}">${midTrunc(job.name)}</div>
+        <div class="job-right">
+          <span id="timer-${id}" class="job-timer">${timerInit}</span>
+          ${(job.status === 'running' || job.status === 'pending') ? `<button class="btn ghost small" onclick="cancelJob('${id}')" title="Отменить">✕</button>` : ''}
+          <div class="job-status ${job.status}">${statusLabel(job)}</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${pct}%; background:${fillColor}"></div>
+      </div>
+      ${job.stage === 'loading_model' ? `<div class="job-stage-loading">⏳ Загружается модель…</div>` : ''}
+      ${job.status === 'running' && !job.segments.length && job.stage !== 'loading_model'
+        ? `<div class="skeleton-lines"><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:45%"></div></div>`
+        : (lastSegments ? `<div class="job-text">${lastSegments}</div>` : '')}
+      ${resultBlock}
+    `;
+  }
+
+  function statusLabel(job) {
+    if (job.status === 'done')    return '✓ Готово';
+    if (job.status === 'error')   return '✕ Ошибка';
+    if (job.status === 'pending') return 'Ожидает';
+    const speedStr = (job.speed && job.speed > 0.1)
+      ? ` · ×${job.speed.toFixed(1)}`
+      : '';
+    return job.percent + '%' + speedStr;
+  }
+
+  function copyPath(id) {
+    const path = jobs[id]?.outputPath;
+    if (path) navigator.clipboard.writeText(path).catch(() => {});
+  }
+
+  function copyTranscript(id) {
+    const job = jobs[id];
+    if (!job) return;
+    const text = job.segments.map(s => s.text.trim()).filter(Boolean).join('\n');
+    navigator.clipboard.writeText(text || '').then(() => dbg('текст скопирован', 'ok')).catch(() => {});
+  }
+
+  function openInExplorer(id, fmt) {
+    const job = jobs[id];
+    if (!job) return;
+    const path = fmt === 'txt' ? job.txtPath
+               : fmt === 'srt' ? job.srtPath
+               : fmt === 'vtt' ? job.vttPath
+               : job.outputPath;
+    if (path) tauriInvoke('open_in_explorer', { path });
+  }
+
+  function cancelJob(id) {
+    dbg(`cancel job ${id}`);
+    tauriInvoke('cancel_job', { id });
+    const job = jobs[id];
+    if (job && job.status === 'running') {
+      job.status = 'error'; job.errorMsg = 'Отменено пользователем'; renderJob(id);
+      _onJobFinished(); // освободить слот очереди
+    } else if (job) {
+      job.status = 'error'; job.errorMsg = 'Отменено пользователем'; renderJob(id);
+    }
+  }
+
+  function retryJob(id) {
+    const job = jobs[id];
+    if (!job || !job.input) return;
+    dbg(`retry job ${id}`);
+    job.status    = 'pending';
+    job.percent   = 0;
+    job.segments  = [];
+    job.outputPath = null;
+    job.txtPath   = null;
+    job.srtPath   = null;
+    job.vttPath   = null;
+    job.errorMsg  = null;
+    job.startTime = Date.now();
+    renderJob(id);
+    const s = loadSettings();
+    _startOrQueue(id, job.input, s.output, s.model, s.language);
+  }
+
+  // ── Tauri events ──────────────────────────────────────────────────────
+  tauriListen('job-event', (raw) => {
+    const payload = raw.payload ?? raw;
+    const { id, data } = payload;
+    dbg(`event: id=${id} type=${data?.type} pct=${data?.percent ?? ''}`);
+
+    // GPU info — глобальное событие, не привязано к карточке
+    if (data.type === 'gpu_info') {
+      _gpuDevice = data.device || 'cpu';
+      const chip = document.getElementById('gpu-chip');
+      if (chip) {
+        if (data.device === 'cuda') {
+          const vram = data.vram_gb ? ` · ${data.vram_gb} ГБ` : '';
+          chip.textContent = `⬤ ${data.name || 'CUDA'}${vram}`;
+          chip.className = 'cuda';
+          chip.title = `Транскрипция на GPU: ${data.name || 'CUDA'}${vram}`;
+        } else {
+          chip.textContent = '⬤ CPU';
+          chip.className = '';
+          chip.title = 'Транскрипция на процессоре (GPU не найден)';
+        }
+        chip.style.display = 'inline-block';
+      }
+      return; // не обновляем карточку
+    }
+
+    const job = jobs[id];
+    if (!job) { dbg(`job not found: ${id}`, 'error'); return; }
+    if (data.type === 'progress') {
+      job.percent = data.percent;
+      job.status  = 'running';
+      job.stage   = data.stage || null;
+      if (data.stage === 'transcribing' && !job.transcribeStart) {
+        job.transcribeStart = Date.now();
+      }
+    }
+    if (data.type === 'segment')  { job.segments.push(data); job.lastSegEnd = data.end || 0; }
+    if (data.type === 'done')  { job.status = 'done'; job.percent = 100; job.outputPath = data.output; job.txtPath = data.txt || null; job.srtPath = data.srt || null; job.vttPath = data.vtt || null; dbg('done: ' + data.output, 'ok'); }
+    if (data.type === 'error') { job.status = 'error'; job.errorMsg = data.message; dbg('error: ' + data.message, 'error'); }
+    renderJob(id);
+
+    // Анимации при завершении + освободить очередь
+    if (data.type === 'done' || data.type === 'error') {
+      const cls = data.type === 'done' ? 'anim-done' : 'anim-err';
+      const jobEl = document.getElementById('job-' + id);
+      if (jobEl) {
+        jobEl.classList.add(cls);
+        setTimeout(() => jobEl.classList.remove(cls), 900);
+      }
+      _onJobFinished();
+    }
+  });
+
+  // ── File handling ─────────────────────────────────────────────────────
+  const dropZone = document.getElementById('drop-zone');
+
+  // DOM drag-over / drag-leave — только для визуала
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+  // DOM drop нужен чтобы браузер не открывал файл, но пути берём из tauri://drag-drop
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+
+  // Tauri v2: drag-drop событие с полными путями
+  tauriListen('tauri://drag-drop', (raw) => {
+    const paths = (raw.payload?.paths) ?? [];
+    dropZone.classList.remove('drag-over');
+    dbg(`drag-drop: ${paths.length} файлов`);
+    enqueueFiles(paths);
+  });
+
+  function enqueueFiles(paths) {
+    const s = loadSettings();
+    paths.forEach(filePath => {
+      const id    = String(Date.now() + Math.random());
+      const name  = filePath.replace(/\\/g, '/').split('/').pop();
+      addJob(id, name, filePath);
+      _startOrQueue(id, filePath, s.output, s.model, s.language);
+      if (!_tauriAvail) mockProgress(id, name);
+    });
+  }
+
+  // Нативный диалог через Rust (rfd) — WebView2 не отдаёт путь через HTML input
+  async function openFilePicker() {
+    const paths = await tauriInvoke('pick_files');
+    if (paths && paths.length) enqueueFiles(paths);
+    // Fallback в браузере (демо без Tauri)
+    if (!_tauriAvail) document.getElementById('file-input').click();
+  }
+
+  function addUrl() {
+    const input = document.getElementById('url-input');
+    const url = input.value.trim();
+    if (!url) { input.focus(); return; }
+    const id = String(Date.now());
+    const label = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
+    addJob(id, label, url);
+    const s = loadSettings();
+    _startOrQueue(id, url, s.output, s.model, s.language);
+    if (!_tauriAvail) mockProgress(id, label);
+    input.value = '';
+  }
+
+  // ── Mock (демо без Tauri) ─────────────────────────────────────────────
+  function mockProgress(id, name) {
+    const mockTexts = [
+      'Добрый день, сегодня мы обсудим архитектуру проекта.',
+      'Первый шаг — настройка окружения и установка зависимостей.',
+      'После этого можно переходить к реализации основной логики.',
+      'Тестирование прошло успешно, результаты положительные.',
+      'Итоговый файл сохранён в указанную папку.',
+    ];
+    let pct = 0, si = 0;
+    const iv = setInterval(() => {
+      pct = Math.min(pct + 6, 100);
+      if (pct % 20 === 0 && si < mockTexts.length) jobs[id].segments.push({ text: mockTexts[si++] });
+      jobs[id].percent = pct;
+      jobs[id].status = 'running';
+
+      if (pct >= 100) {
+        clearInterval(iv);
+        jobs[id].status = 'done';
+        jobs[id].outputPath = `C:\\Users\\Lenovo\\Documents\\Транскрибатор\\output\\${name.replace(/\.[^.]+$/, '')}.json`;
+      }
+      renderJob(id);
+    }, 200);
+  }
+
+  // ── Viewer ───────────────────────────────────────────────────────
+  let _viewerJobId = null;
+
+  function fmtTs(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function escHtml(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function openViewer(id) {
+    const job = jobs[id];
+    if (!job) return;
+    _viewerJobId = id;
+    document.getElementById('viewer-title').textContent = job.name;
+    const body = document.getElementById('viewer-body');
+    if (!job.segments.length) {
+      body.innerHTML = '<div class="viewer-empty">Нет сегментов</div>';
+    } else {
+      body.innerHTML = job.segments.map(seg =>
+        `<div class="viewer-seg">
+          <span class="viewer-ts" onclick="navigator.clipboard.writeText('${fmtTs(seg.start)}')" title="Копировать метку">[${fmtTs(seg.start)}]</span>
+          <span class="viewer-text">${escHtml(seg.text.trim())}</span>
+        </div>`
+      ).join('');
+    }
+    document.getElementById('viewer-overlay').classList.add('open');
+  }
+
+  function closeViewer() {
+    document.getElementById('viewer-overlay').classList.remove('open');
+    _viewerJobId = null;
+  }
+
+  function copyAllText() {
+    const job = _viewerJobId ? jobs[_viewerJobId] : null;
+    if (!job) return;
+    const text = job.segments.map(s => s.text.trim()).filter(Boolean).join('\n');
+    navigator.clipboard.writeText(text).then(() => dbg('текст скопирован', 'ok')).catch(() => {});
+  }
+
+  // ── Command palette ───────────────────────────────────────────────────
+  const COMMANDS = [
+    { icon: '📂', label: 'Добавить файл',           hint: '',              action: openFilePicker },
+    { icon: '🔗', label: 'Добавить YouTube ссылку',  hint: '',              action: focusUrl },
+    { icon: '🗑',  label: 'Очистить очередь',         hint: '',              action: clearQueue },
+    { icon: '📁', label: 'Открыть папку вывода',     hint: 'output/',       action: openOutputFolder },
+    { icon: '⚙️', label: 'Настройки',                hint: 'Модель, язык',  action: openSettings },
+  ];
+
+  let filtered = [...COMMANDS];
+  let activeIdx = 0;
+
+  function openPalette() {
+    document.getElementById('palette-overlay').classList.add('open');
+    const inp = document.getElementById('palette-input');
+    inp.value = '';
+    filtered = [...COMMANDS];
+    activeIdx = 0;
+    renderPaletteList();
+    setTimeout(() => inp.focus(), 10);
+  }
+
+  function closePalette() {
+    document.getElementById('palette-overlay').classList.remove('open');
+  }
+
+  function filterCommands() {
+    const q = document.getElementById('palette-input').value.toLowerCase();
+    filtered = COMMANDS.filter(c => c.label.toLowerCase().includes(q));
+    activeIdx = 0;
+    renderPaletteList();
+  }
+
+  function renderPaletteList() {
+    document.getElementById('palette-list').innerHTML = filtered.map((c, i) => `
+      <li class="${i === activeIdx ? 'active' : ''}" onclick="runCommand(${i})">
+        <span class="cmd-icon">${c.icon}</span>
+        <span class="cmd-label">${c.label}</span>
+        ${c.hint ? `<span class="cmd-hint">${c.hint}</span>` : ''}
+      </li>`).join('');
+  }
+
+  function paletteKey(e) {
+    if (e.key === 'Escape')    { closePalette(); return; }
+    if (e.key === 'ArrowDown') { activeIdx = Math.min(activeIdx + 1, filtered.length - 1); renderPaletteList(); e.preventDefault(); }
+    if (e.key === 'ArrowUp')   { activeIdx = Math.max(activeIdx - 1, 0); renderPaletteList(); e.preventDefault(); }
+    if (e.key === 'Enter')     { runCommand(activeIdx); }
+  }
+
+  function runCommand(i) { closePalette(); filtered[i]?.action(); }
+
+  // ── Command actions ───────────────────────────────────────────────────
+  function focusUrl()        { document.getElementById('url-input').focus(); }
+  function clearQueue() {
+    const active = Object.values(jobs).filter(j => j.status === 'running' || j.status === 'pending');
+    if (active.length > 0 && !confirm(`Есть ${active.length} активных задач. Отменить и очистить?`)) return;
+    active.forEach(j => tauriInvoke('cancel_job', { id: j.id }));
+    Object.keys(jobs).forEach(id => delete jobs[id]);
+    document.getElementById('queue').innerHTML = '';
+    document.getElementById('drop-zone').classList.remove('compact');
+  }
+  function openOutputFolder(){ tauriInvoke('open_output_folder'); }
+
+  // ── Global keys ───────────────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    // e.code — физическая клавиша, не зависит от раскладки (ru/en)
+    if (e.ctrlKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); }
+    if (e.key === 'Escape') { closePalette(); closeSettings(); closeViewer(); }
+  });
+</script>
+</body>
+</html>

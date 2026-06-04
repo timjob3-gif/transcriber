@@ -1,0 +1,26 @@
+# Tauri
+src-tauri/target/
+
+# Node
+node_modules/
+dist/
+
+# Python
+python/__pycache__/
+python/*.pyc
+python/.venv/
+python/venv/
+*.egg-info/
+
+# Output & temp
+output/
+*.partial.json
+*.wav
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
