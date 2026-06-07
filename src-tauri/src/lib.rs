@@ -363,6 +363,72 @@ fn set_setting(app: AppHandle, key: String, value: serde_json::Value) {
     }
 }
 
+/// Возвращает список завершённых транскрипций из папки вывода.
+/// Каждый элемент: { path, name, modified (unix), duration, segments }
+#[tauri::command]
+fn list_history(app: AppHandle) -> Vec<serde_json::Value> {
+    let out_dir = default_output(&app);
+    let mut results: Vec<(u64, serde_json::Value)> = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(&out_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // Только .json, не .partial.json
+            let is_json = path.extension().and_then(|s| s.to_str()) == Some("json");
+            let is_partial = path.file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.ends_with(".partial"))
+                .unwrap_or(false);
+            if !is_json || is_partial { continue; }
+
+            let meta = entry.metadata().ok();
+            let modified = meta.as_ref()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+
+            // Читаем JSON чтобы взять duration и число сегментов
+            let (duration, segments_count) = if let Ok(raw) = std::fs::read_to_string(&path) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    let dur = v.get("duration").and_then(|d| d.as_f64());
+                    let segs = v.get("segments")
+                        .and_then(|s| s.as_array())
+                        .map(|a| a.len() as u64);
+                    (dur, segs)
+                } else { (None, None) }
+            } else { (None, None) };
+
+            let name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("?")
+                .to_string();
+
+            let item = serde_json::json!({
+                "path": path.to_string_lossy(),
+                "name": name,
+                "modified": modified,
+                "duration": duration,
+                "segments": segments_count,
+            });
+            results.push((modified, item));
+        }
+    }
+
+    // Сортируем по времени модификации, новейшие первые
+    results.sort_by(|a, b| b.0.cmp(&a.0));
+    results.into_iter().map(|(_, v)| v).collect()
+}
+
+/// Читает конкретный JSON-результат с диска и возвращает его.
+#[tauri::command]
+fn read_result(path: String) -> Result<serde_json::Value, String> {
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Не удалось прочитать файл: {e}"))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| format!("Некорректный JSON: {e}"))
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn emit_event(app: &AppHandle, id: &str, data: serde_json::Value) {
@@ -372,6 +438,9 @@ fn emit_event(app: &AppHandle, id: &str, data: serde_json::Value) {
 // ── Entry ─────────────────────────────────────────────────────────────────────
 
 pub fn run() {
+    use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -396,6 +465,52 @@ pub fn run() {
                     }
                 }
             }
+
+            // ── Системный трей ────────────────────────────────────────────
+            let handle = app.handle().clone();
+            let menu_open = MenuItem::with_id(app, "open", "Открыть", true, None::<&str>)?;
+            let menu_sep  = PredefinedMenuItem::separator(app)?;
+            let menu_quit = MenuItem::with_id(app, "quit", "Выйти", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&menu_open, &menu_sep, &menu_quit])?;
+
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("Транскрибатор")
+                .on_menu_event(move |_app, event| {
+                    match event.id().as_ref() {
+                        "open" => {
+                            if let Some(win) = _app.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                        }
+                        "quit" => std::process::exit(0),
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(move |_tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+                        if let Some(win) = handle.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Закрытие окна → скрыть вместо выхода
+            let app_handle_close = app.handle().clone();
+            let win = app.get_webview_window("main").unwrap();
+            win.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Some(w) = app_handle_close.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -408,6 +523,8 @@ pub fn run() {
             pick_folder,
             open_output_folder,
             open_in_explorer,
+            list_history,
+            read_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

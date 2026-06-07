@@ -1,6 +1,6 @@
 [package]
 name = "transcriber"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 
 [lib]
@@ -15,7 +15,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri                      = { version = "2", features = [] }
+tauri                      = { version = "2", features = ["tray-icon"] }
 tauri-plugin-notification  = "2"
 tauri-plugin-store         = "2"
 serde                      = { version = "1", features = ["derive"] }

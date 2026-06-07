@@ -539,6 +539,24 @@
     align-self: flex-start;
     margin-top: 3px;
     letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .viewer-speaker:hover { opacity: 0.75; }
+  .viewer-speaker-input {
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+    padding: 0 5px;
+    border-radius: 10px;
+    border: 1px solid var(--accent);
+    background: var(--bg);
+    color: var(--text);
+    width: 70px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 3px;
+    outline: none;
   }
   .viewer-empty {
     text-align: center;
@@ -624,6 +642,76 @@
   .dline { padding: 1px 0; color: #888; }
   .dline.error { color: var(--error); }
   .dline.ok { color: var(--success); }
+
+  /* ── History panel ── */
+  #history-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 90;
+  }
+  #history-overlay.open { display: block; }
+  #history-panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 420px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+    animation: slideInRight 0.22s ease-out;
+  }
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .history-header span { font-weight: 600; font-size: 14px; }
+  #history-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+  #history-body.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .history-empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 20px;
+  }
+  .history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .history-item:hover { background: rgba(255,255,255,0.04); }
+  .history-item-name {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .history-item-meta {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+  }
+  .history-item-meta span { white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -632,6 +720,7 @@
   <div class="logo"><span>◈</span> Транскрибатор</div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="gpu-chip" title="Транскрипция на процессоре (GPU не найден)">⬤ CPU</span>
+    <button class="btn ghost small" onclick="openHistory()" title="История транскрипций">🕓</button>
     <button class="btn ghost small" onclick="openSettings()" title="Настройки">⚙️</button>
     <button class="btn ghost small" onclick="openPalette()" title="Команды (Ctrl+K)">⋯</button>
   </div>
@@ -760,6 +849,17 @@
       <button class="btn ghost" onclick="closeSettings()">Отмена</button>
       <button class="btn" onclick="saveSettings()">Сохранить</button>
     </div>
+  </div>
+</div>
+
+<!-- History panel -->
+<div id="history-overlay" onclick="if(event.target===this)closeHistory()">
+  <div id="history-panel">
+    <div class="history-header">
+      <span>🕓 История</span>
+      <button class="btn ghost small" onclick="closeHistory()">✕</button>
+    </div>
+    <div id="history-body" class="loading">Загрузка…</div>
   </div>
 </div>
 
@@ -1040,7 +1140,7 @@
   }
 
   function addJob(id, name, inputPath) {
-    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null };
+    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {} };
     renderJob(id);
     document.getElementById('drop-zone').classList.add('compact');
   }
@@ -1114,7 +1214,7 @@
     }
 
     const lastSegments = job.segments.slice(-2).map(s => {
-      const prefix = s.speaker ? `[${s.speaker.replace('SPEAKER_', 'S')}] ` : '';
+      const prefix = s.speaker ? `[${_speakerLabel(s.speaker, id)}] ` : '';
       return prefix + s.text;
     }).join(' ');
 
@@ -1165,7 +1265,7 @@
     const text = job.segments.map(s => {
       const t = s.text.trim();
       if (!t) return '';
-      return hasSpeakers ? `[${(s.speaker || 'SPEAKER_0').replace('SPEAKER_', 'S')}] ${t}` : t;
+      return hasSpeakers ? `[${_speakerLabel(s.speaker, id) || 'S?'}] ${t}` : t;
     }).filter(Boolean).join('\n');
     navigator.clipboard.writeText(text || '').then(() => dbg('текст скопирован', 'ok')).catch(() => {});
   }
@@ -1366,9 +1466,10 @@
     { bg: 'rgba(56,189,248,0.18)',  color: '#38bdf8' },
   ];
 
-  function _speakerLabel(raw) {
-    // "SPEAKER_0" → "S0", "SPEAKER_1" → "S1", etc.
+  function _speakerLabel(raw, jobId) {
     if (!raw) return null;
+    // Кастомное имя если есть
+    if (jobId && jobs[jobId]?.speakerNames?.[raw]) return jobs[jobId].speakerNames[raw];
     return raw.replace('SPEAKER_', 'S');
   }
 
@@ -1389,10 +1490,10 @@
     } else {
       const hasSpeakers = job.segments.some(s => s.speaker);
       body.innerHTML = job.segments.map(seg => {
-        const label = _speakerLabel(seg.speaker);
+        const label = _speakerLabel(seg.speaker, id);
         const col   = _speakerColor(seg.speaker);
-        const spkBadge = (hasSpeakers && label && col)
-          ? `<span class="viewer-speaker" style="background:${col.bg};color:${col.color}">${label}</span>`
+        const spkBadge = (hasSpeakers && seg.speaker && col)
+          ? `<span class="viewer-speaker" data-speaker="${seg.speaker}" style="background:${col.bg};color:${col.color}" title="Двойной клик — переименовать">${label}</span>`
           : '';
         return `<div class="viewer-seg">
           <span class="viewer-ts" onclick="navigator.clipboard.writeText('${fmtTs(seg.start)}')" title="Копировать метку">[${fmtTs(seg.start)}]</span>
@@ -1417,10 +1518,104 @@
       const t = s.text.trim();
       if (!t) return '';
       const ts = `[${fmtTs(s.start)}]`;
-      const spk = hasSpeakers ? ` [${_speakerLabel(s.speaker) || 'S?'}]` : '';
+      const spk = hasSpeakers ? ` [${_speakerLabel(s.speaker, _viewerJobId) || 'S?'}]` : '';
       return `${ts}${spk} ${t}`;
     }).filter(Boolean).join('\n');
     navigator.clipboard.writeText(text).then(() => dbg('текст скопирован', 'ok')).catch(() => {});
+  }
+
+  // ── Speaker rename (dblclick на бейдже в просмотрщике) ───────────────
+  document.getElementById('viewer-body').addEventListener('dblclick', e => {
+    const badge = e.target.closest('.viewer-speaker');
+    if (!badge || !_viewerJobId) return;
+    const raw = badge.dataset.speaker;
+    if (!raw) return;
+    const job = jobs[_viewerJobId];
+    if (!job) return;
+    const current = job.speakerNames[raw] || badge.textContent.trim();
+    // Заменяем бейдж на input
+    const input = document.createElement('input');
+    input.className = 'viewer-speaker-input';
+    input.value = current;
+    badge.replaceWith(input);
+    input.focus();
+    input.select();
+    function commit() {
+      const val = input.value.trim();
+      if (val && val !== '') {
+        job.speakerNames[raw] = val;
+      } else {
+        delete job.speakerNames[raw];
+      }
+      // Переоткрываем viewer чтобы все бейджи обновились
+      openViewer(_viewerJobId);
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', ke => {
+      if (ke.key === 'Enter') { ke.preventDefault(); input.blur(); }
+      if (ke.key === 'Escape') { input.removeEventListener('blur', commit); openViewer(_viewerJobId); }
+    });
+  });
+
+  // ── История транскрипций ──────────────────────────────────────────────
+  function openHistory() {
+    document.getElementById('history-overlay').classList.add('open');
+    loadHistory();
+  }
+
+  function closeHistory() {
+    document.getElementById('history-overlay').classList.remove('open');
+  }
+
+  async function loadHistory() {
+    const body = document.getElementById('history-body');
+    body.className = 'loading';
+    body.textContent = 'Загрузка…';
+    try {
+      const items = await tauriInvoke('list_history');
+      if (!items || items.length === 0) {
+        body.className = '';
+        body.innerHTML = '<div class="history-empty">История пуста</div>';
+        return;
+      }
+      body.className = '';
+      body.innerHTML = items.map(it => {
+        const date = it.modified ? new Date(it.modified * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const dur = it.duration ? fmtTime(Math.round(it.duration)) : '';
+        const segs = it.segments != null ? `${it.segments} сегм.` : '';
+        return `<div class="history-item" onclick="openHistoryItem(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})">
+          <div class="history-item-name">${escHtml(it.name)}</div>
+          <div class="history-item-meta">
+            ${date ? `<span>${date}</span>` : ''}
+            ${dur ? `<span>${dur}</span>` : ''}
+            ${segs ? `<span>${segs}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    } catch (err) {
+      body.className = '';
+      body.innerHTML = `<div class="history-empty">Ошибка: ${escHtml(String(err))}</div>`;
+    }
+  }
+
+  async function openHistoryItem(path, name) {
+    closeHistory();
+    try {
+      const data = await tauriInvoke('read_result', { path });
+      // Создаём синтетический job из исторических данных
+      const id = 'hist_' + Date.now();
+      jobs[id] = {
+        id, name, input: '', percent: 100, status: 'done', stage: null,
+        segments: data.segments || [],
+        outputPath: path, txtPath: null, srtPath: null, vttPath: null,
+        errorMsg: null, startTime: Date.now(), transcribeStart: null,
+        lastSegEnd: 0, speed: null, speakerNames: {},
+        _history: true,
+      };
+      openViewer(id);
+    } catch (err) {
+      dbg('Ошибка открытия: ' + String(err), 'error');
+    }
   }
 
   // ── Command palette ───────────────────────────────────────────────────
@@ -1490,7 +1685,7 @@
   document.addEventListener('keydown', e => {
     // e.code — физическая клавиша, не зависит от раскладки (ru/en)
     if (e.ctrlKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); }
-    if (e.key === 'Escape') { closePalette(); closeSettings(); closeViewer(); }
+    if (e.key === 'Escape') { closePalette(); closeSettings(); closeViewer(); closeHistory(); }
   });
 
   // ── Инициализация ─────────────────────────────────────────────────────
