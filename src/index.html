@@ -600,6 +600,28 @@
     50%       { opacity: 0.4; }
   }
 
+  /* ── Per-job speakers selector ── */
+  .job-speakers-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 0 1px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .job-speakers-sel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 2px 6px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .job-speakers-sel:focus { border-color: var(--accent); }
+
   /* ── Skeleton loader ── */
   .skeleton-lines { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 2px; }
   .skeleton-line {
@@ -1105,12 +1127,15 @@
   let _activeCount = 0;         // сколько Python-процессов работает
 
   function _startOrQueue(id, input, output, model, language, diarize, speakers) {
-    const spk = (diarize && speakers > 0) ? speakers : null;
+    // Индивидуальное число голосов приоритетнее глобальной настройки
+    const effectiveSpeakers = (jobs[id]?.jobSpeakers != null) ? jobs[id].jobSpeakers : (speakers || 0);
+    const spk = (diarize && effectiveSpeakers > 0) ? effectiveSpeakers : null;
     if (_gpuDevice === 'cuda' || _activeCount === 0) {
       _activeCount++;
       tauriInvoke('start_job', { id, input, output, model, language, diarize: !!diarize, speakers: spk });
     } else {
-      _pendingQueue.push({ id, input, output, model, language, diarize: !!diarize, speakers: spk });
+      // speakers НЕ кладём в очередь — читаем из job-объекта при старте
+      _pendingQueue.push({ id, input, output, model, language, diarize: !!diarize });
       dbg(`в очереди (CPU): ${input.split(/[\\/]/).pop()}`);
     }
   }
@@ -1120,8 +1145,11 @@
     if (_pendingQueue.length > 0 && (_gpuDevice === 'cuda' || _activeCount === 0)) {
       const next = _pendingQueue.shift();
       _activeCount++;
+      const job = jobs[next.id];
+      const effectiveSpeakers = job?.jobSpeakers || 0;
+      const spk = (next.diarize && effectiveSpeakers > 0) ? effectiveSpeakers : null;
       dbg(`запуск из очереди: ${next.input.split(/[\\/]/).pop()}`);
-      tauriInvoke('start_job', next);
+      tauriInvoke('start_job', { ...next, speakers: spk });
     }
   }
 
@@ -1140,7 +1168,7 @@
   }
 
   function addJob(id, name, inputPath) {
-    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {} };
+    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {}, jobSpeakers: _settings.speakers || 0 };
     renderJob(id);
     document.getElementById('drop-zone').classList.add('compact');
   }
@@ -1236,6 +1264,13 @@
       </div>
       ${job.stage === 'loading_model' ? `<div class="job-stage-loading">⏳ Загружается модель…</div>` : ''}
       ${job.stage === 'diarizing' ? `<div class="job-stage-loading">🎤 Определяю спикеров…</div>` : ''}
+      ${job.status === 'pending' && _settings.diarize ? `
+        <div class="job-speakers-row">
+          🎤 Голосов:
+          <select class="job-speakers-sel" onchange="setJobSpeakers('${id}', +this.value)">
+            ${[0,2,3,4,5,6].map(n => `<option value="${n}" ${(job.jobSpeakers||0)===n?'selected':''}>${n===0?'Авто':n}</option>`).join('')}
+          </select>
+        </div>` : ''}
       ${job.status === 'running' && !job.segments.length && job.stage !== 'loading_model' && job.stage !== 'diarizing'
         ? `<div class="skeleton-lines"><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:45%"></div></div>`
         : (lastSegments ? `<div class="job-text">${lastSegments}</div>` : '')}
@@ -1251,6 +1286,10 @@
       ? ` · ×${job.speed.toFixed(1)}`
       : '';
     return job.percent + '%' + speedStr;
+  }
+
+  function setJobSpeakers(id, val) {
+    if (jobs[id]) jobs[id].jobSpeakers = val;
   }
 
   function copyPath(id) {
@@ -1307,7 +1346,8 @@
     job.startTime = Date.now();
     renderJob(id);
     const s = loadSettings();
-    _startOrQueue(id, job.input, s.output, s.model, s.language, s.diarize, s.speakers);
+    // jobSpeakers сохранён в объекте job, _startOrQueue прочитает его сам
+    _startOrQueue(id, job.input, s.output, s.model, s.language, s.diarize, job.jobSpeakers || s.speakers);
   }
 
   // ── Tauri events ──────────────────────────────────────────────────────
