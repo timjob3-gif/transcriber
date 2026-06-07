@@ -59,6 +59,9 @@
       gap: 16px;
       padding: 20px;
       overflow: hidden;
+      max-width: 860px;
+      width: 100%;
+      align-self: center;
     }
 
     /* ── Drop zone ── */
@@ -373,6 +376,16 @@
       padding: 12px 16px; border-top: 1px solid var(--border);
       display: flex; justify-content: flex-end; gap: 8px;
     }
+    /* Settings group dividers */
+    .settings-group-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: 0.1em;
+      opacity: 0.55;
+      margin: 6px 0 0;
+      user-select: none;
+    }
 
     /* ── GPU chip ── */
     #gpu-chip {
@@ -385,6 +398,65 @@
       white-space: nowrap;
     }
     #gpu-chip.cuda { color: var(--success); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.06); }
+
+  /* ── Welcome overlay ── */
+  #welcome-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+  }
+  #welcome-overlay.open { display: flex; }
+  #welcome-box {
+    background: var(--surface);
+    border: 1px solid #333;
+    border-radius: 16px;
+    width: 420px;
+    padding: 36px 32px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    animation: slideIn 0.3s ease-out;
+  }
+  .welcome-icon { font-size: 40px; color: var(--accent); line-height: 1; }
+  #welcome-box h1 { font-size: 22px; font-weight: 700; }
+  #welcome-box > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .welcome-warning {
+    background: rgba(251,191,36,0.09);
+    border: 1px solid rgba(251,191,36,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #fbbf24;
+    text-align: left;
+    width: 100%;
+    line-height: 1.6;
+  }
+  #welcome-dl-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .welcome-sub { font-size: 13px; color: var(--muted); }
+  .welcome-status-text { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .welcome-error-text {
+    font-size: 12px;
+    color: var(--error);
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    width: 100%;
+    text-align: left;
+  }
 
   /* ── Viewer panel ── */
   #viewer-overlay {
@@ -457,6 +529,17 @@
   }
   .viewer-ts:hover { opacity: 1; text-decoration: underline; }
   .viewer-text { font-size: 13px; color: var(--text); }
+  .viewer-speaker {
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+    padding: 1px 6px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 3px;
+    letter-spacing: 0.03em;
+  }
   .viewer-empty {
     text-align: center;
     color: var(--muted);
@@ -578,6 +661,35 @@
 
 </main>
 
+<!-- Welcome overlay (first run) -->
+<div id="welcome-overlay">
+  <div id="welcome-box">
+    <div class="welcome-icon">◈</div>
+    <h1>Транскрибатор</h1>
+    <p>Офлайн-транскрипция речи прямо на вашем компьютере — без интернета и облаков.</p>
+    <div class="welcome-warning">
+      ⚠ При первом запуске Windows может показать предупреждение SmartScreen.<br>
+      Нажмите <b>«Подробнее»</b> → <b>«Выполнить в любом случае»</b>.
+    </div>
+    <div id="welcome-dl-section">
+      <p class="welcome-sub">Для работы нужна модель Whisper <b>base</b> (~150 МБ).</p>
+      <button class="btn" id="welcome-dl-btn" onclick="startModelDownload()">
+        ⬇ Скачать модель
+      </button>
+      <div id="welcome-progress" style="display:none;width:100%">
+        <div class="progress-bar" style="margin-top:6px">
+          <div class="progress-fill" id="welcome-fill" style="width:0%"></div>
+        </div>
+        <div id="welcome-status" class="welcome-status-text">Скачивание…</div>
+      </div>
+      <div id="welcome-error" style="display:none" class="welcome-error-text"></div>
+    </div>
+    <button class="btn" id="welcome-start-btn" style="display:none" onclick="closeWelcome()">
+      ✓ Начать работу →
+    </button>
+  </div>
+</div>
+
 <!-- Settings modal -->
 <div id="settings-overlay" onclick="if(event.target===this) closeSettings()">
   <div id="settings-box">
@@ -586,6 +698,8 @@
       <button class="btn ghost small" onclick="closeSettings()">✕</button>
     </div>
     <div class="settings-body">
+
+      <div class="settings-group-label">— Транскрипция —</div>
       <div class="settings-row">
         <label>Модель Whisper</label>
         <select id="set-model">
@@ -608,7 +722,8 @@
           <option value="zh">中文</option>
         </select>
       </div>
-    </div>
+
+      <div class="settings-group-label">— Вывод —</div>
       <div class="settings-row">
         <label>Папка вывода</label>
         <div class="settings-folder-row">
@@ -618,6 +733,28 @@
           <button class="btn ghost small" onclick="document.getElementById('set-output').value=''" title="Сбросить">✕</button>
         </div>
       </div>
+
+      <div class="settings-group-label">— Голоса —</div>
+      <div class="settings-row">
+        <label>Определение спикеров</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);text-transform:none;letter-spacing:normal;">
+          <input type="checkbox" id="set-diarize" style="width:16px;height:16px;accent-color:var(--accent);" onchange="document.getElementById('row-speakers').style.display=this.checked?'flex':'none'" />
+          Разделять голоса участников разговора
+        </label>
+        <span style="font-size:11px;color:var(--muted);">Прибавляет ~30 сек к обработке. Работает без интернета.</span>
+      </div>
+      <div class="settings-row" id="row-speakers" style="display:none">
+        <label>Количество участников</label>
+        <select id="set-speakers">
+          <option value="0">Авто (определится автоматически)</option>
+          <option value="2">2 участника</option>
+          <option value="3">3 участника</option>
+          <option value="4">4 участника</option>
+          <option value="5">5 участников</option>
+          <option value="6">6 участников</option>
+        </select>
+      </div>
+
     </div>
     <div class="settings-footer">
       <button class="btn ghost" onclick="closeSettings()">Отмена</button>
@@ -649,7 +786,7 @@
     <div class="viewer-header">
       <span class="viewer-title" id="viewer-title">—</span>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-        <button class="btn ghost small" onclick="copyAllText()">📋 Копировать</button>
+        <button class="btn ghost small" onclick="copyAllText()" title="Скопировать с таймкодами">📋 С таймкодами</button>
         <button class="btn ghost small" onclick="closeViewer()">✕</button>
       </div>
     </div>
@@ -732,34 +869,133 @@
     }
   }
 
-  // ── Settings ─────────────────────────────────────────────────────────
-  function loadSettings() {
-    return {
-      model:    localStorage.getItem('model')    || 'large-v3',
-      language: localStorage.getItem('language') || '',
-      output:   localStorage.getItem('output')   || '',
-    };
+  // ── Settings (persistent via tauri-plugin-store) ─────────────────────
+  // Глобальный объект — грузится один раз при старте из store/localStorage
+  let _settings = { model: 'base', language: '', output: '', diarize: false, speakers: 0 };
+
+  async function initSettings() {
+    if (_tauriAvail) {
+      const model    = await tauriInvoke('get_setting', { key: 'model' });
+      const lang     = await tauriInvoke('get_setting', { key: 'language' });
+      const output   = await tauriInvoke('get_setting', { key: 'output' });
+      const diarize  = await tauriInvoke('get_setting', { key: 'diarize' });
+      const speakers = await tauriInvoke('get_setting', { key: 'speakers' });
+      if (model    != null) _settings.model    = model;
+      if (lang     != null) _settings.language = lang;
+      if (output   != null) _settings.output   = output;
+      if (diarize  != null) _settings.diarize  = !!diarize;
+      if (speakers != null) _settings.speakers = Number(speakers) || 0;
+    } else {
+      _settings.model    = localStorage.getItem('model')    || 'base';
+      _settings.language = localStorage.getItem('language') || '';
+      _settings.output   = localStorage.getItem('output')   || '';
+      _settings.diarize  = localStorage.getItem('diarize')  === 'true';
+      _settings.speakers = Number(localStorage.getItem('speakers')) || 0;
+    }
+    dbg('settings loaded: model=' + _settings.model + ' diarize=' + _settings.diarize + ' speakers=' + _settings.speakers);
   }
+
+  function loadSettings() { return { ..._settings }; }
+
   function openSettings() {
     const s = loadSettings();
     document.getElementById('set-model').value    = s.model;
     document.getElementById('set-language').value = s.language;
     document.getElementById('set-output').value   = s.output;
+    document.getElementById('set-diarize').checked = !!s.diarize;
+    document.getElementById('set-speakers').value  = String(s.speakers || 0);
+    document.getElementById('row-speakers').style.display = s.diarize ? 'flex' : 'none';
     document.getElementById('settings-overlay').classList.add('open');
   }
   function closeSettings() {
     document.getElementById('settings-overlay').classList.remove('open');
   }
-  function saveSettings() {
-    localStorage.setItem('model',    document.getElementById('set-model').value);
-    localStorage.setItem('language', document.getElementById('set-language').value);
-    localStorage.setItem('output',   document.getElementById('set-output').value.trim());
+  async function saveSettings() {
+    _settings.model    = document.getElementById('set-model').value;
+    _settings.language = document.getElementById('set-language').value;
+    _settings.output   = document.getElementById('set-output').value.trim();
+    _settings.diarize  = document.getElementById('set-diarize').checked;
+    _settings.speakers = Number(document.getElementById('set-speakers').value) || 0;
+    if (_tauriAvail) {
+      await tauriInvoke('set_setting', { key: 'model',    value: _settings.model });
+      await tauriInvoke('set_setting', { key: 'language', value: _settings.language });
+      await tauriInvoke('set_setting', { key: 'output',   value: _settings.output });
+      await tauriInvoke('set_setting', { key: 'diarize',  value: _settings.diarize });
+      await tauriInvoke('set_setting', { key: 'speakers', value: _settings.speakers });
+    } else {
+      localStorage.setItem('model',    _settings.model);
+      localStorage.setItem('language', _settings.language);
+      localStorage.setItem('output',   _settings.output);
+      localStorage.setItem('diarize',  String(_settings.diarize));
+      localStorage.setItem('speakers', String(_settings.speakers));
+    }
     closeSettings();
-    dbg('settings saved: model=' + localStorage.getItem('model') + ' output=' + (localStorage.getItem('output')||'default'), 'ok');
+    dbg('settings saved: model=' + _settings.model + ' diarize=' + _settings.diarize + ' speakers=' + _settings.speakers, 'ok');
   }
   async function browseOutputFolder() {
     const path = await tauriInvoke('pick_folder');
     if (path) document.getElementById('set-output').value = path;
+  }
+
+  // ── Welcome screen ────────────────────────────────────────────────────
+  const _WELCOME_JOB_ID = '__welcome__';
+
+  async function checkFirstRun() {
+    if (!_tauriAvail) return; // нет first-run в браузерном демо
+    const done = await tauriInvoke('get_setting', { key: 'first_run' });
+    dbg('first_run=' + JSON.stringify(done));
+    if (!done) showWelcome();
+  }
+
+  function showWelcome() {
+    document.getElementById('welcome-overlay').classList.add('open');
+  }
+
+  async function closeWelcome() {
+    document.getElementById('welcome-overlay').classList.remove('open');
+    if (_tauriAvail) await tauriInvoke('set_setting', { key: 'first_run', value: true });
+  }
+
+  async function startModelDownload() {
+    const btn = document.getElementById('welcome-dl-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Скачивание…';
+    document.getElementById('welcome-progress').style.display = 'block';
+    document.getElementById('welcome-error').style.display = 'none';
+    document.getElementById('welcome-fill').style.width = '0%';
+    document.getElementById('welcome-status').textContent = 'Скачивание…';
+    const model = _settings.model || 'base';
+    await tauriInvoke('download_model', { id: _WELCOME_JOB_ID, model });
+  }
+
+  function handleWelcomeEvent(data) {
+    if (data.type === 'download_progress') {
+      const pct    = data.percent || 0;
+      const status = data.status  || '';
+      document.getElementById('welcome-fill').style.width = pct + '%';
+      if (status === 'cached') {
+        document.getElementById('welcome-status').textContent = '✓ Модель уже скачана';
+        _onModelReady();
+      } else if (status === 'complete' || pct >= 100) {
+        document.getElementById('welcome-status').textContent = '✓ Готово';
+        _onModelReady();
+      } else {
+        document.getElementById('welcome-status').textContent = 'Скачивание… ' + pct + '%';
+      }
+    } else if (data.type === 'download_error') {
+      document.getElementById('welcome-progress').style.display = 'none';
+      const errEl = document.getElementById('welcome-error');
+      errEl.textContent = 'Ошибка: ' + (data.message || 'сбой загрузки');
+      errEl.style.display = 'block';
+      const btn = document.getElementById('welcome-dl-btn');
+      btn.disabled = false;
+      btn.textContent = '↻ Повторить';
+    }
+  }
+
+  function _onModelReady() {
+    document.getElementById('welcome-dl-section').style.display = 'none';
+    document.getElementById('welcome-start-btn').style.display = 'inline-flex';
   }
 
   // ── Jobs ──────────────────────────────────────────────────────────────
@@ -768,12 +1004,13 @@
   const _pendingQueue = [];     // ожидают запуска (CPU-режим)
   let _activeCount = 0;         // сколько Python-процессов работает
 
-  function _startOrQueue(id, input, output, model, language) {
+  function _startOrQueue(id, input, output, model, language, diarize, speakers) {
+    const spk = (diarize && speakers > 0) ? speakers : null;
     if (_gpuDevice === 'cuda' || _activeCount === 0) {
       _activeCount++;
-      tauriInvoke('start_job', { id, input, output, model, language });
+      tauriInvoke('start_job', { id, input, output, model, language, diarize: !!diarize, speakers: spk });
     } else {
-      _pendingQueue.push({ id, input, output, model, language });
+      _pendingQueue.push({ id, input, output, model, language, diarize: !!diarize, speakers: spk });
       dbg(`в очереди (CPU): ${input.split(/[\\/]/).pop()}`);
     }
   }
@@ -861,7 +1098,7 @@
       resultBlock = `
         <div class="job-result">
           <button class="btn ghost small" onclick="openViewer('${id}')" title="Читать текст транскрипции">👁</button>
-          <button class="btn ghost small" onclick="copyTranscript('${id}')" title="Скопировать текст транскрипции">📋 Текст</button>
+          <button class="btn ghost small" onclick="copyTranscript('${id}')" title="Скопировать чистый текст без меток">📋 Без меток</button>
           ${fmtBtns}
           <button class="btn ghost small" onclick="openInExplorer('${id}')" title="Открыть папку в проводнике">📂</button>
         </div>`;
@@ -876,7 +1113,10 @@
         </div>`;
     }
 
-    const lastSegments = job.segments.slice(-2).map(s => s.text).join(' ');
+    const lastSegments = job.segments.slice(-2).map(s => {
+      const prefix = s.speaker ? `[${s.speaker.replace('SPEAKER_', 'S')}] ` : '';
+      return prefix + s.text;
+    }).join(' ');
 
     const elapsed = Math.floor((Date.now() - (job.startTime || Date.now())) / 1000);
     const timerInit = (job.status === 'done' || job.status === 'error')
@@ -895,7 +1135,8 @@
         <div class="progress-fill" style="width:${pct}%; background:${fillColor}"></div>
       </div>
       ${job.stage === 'loading_model' ? `<div class="job-stage-loading">⏳ Загружается модель…</div>` : ''}
-      ${job.status === 'running' && !job.segments.length && job.stage !== 'loading_model'
+      ${job.stage === 'diarizing' ? `<div class="job-stage-loading">🎤 Определяю спикеров…</div>` : ''}
+      ${job.status === 'running' && !job.segments.length && job.stage !== 'loading_model' && job.stage !== 'diarizing'
         ? `<div class="skeleton-lines"><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:45%"></div></div>`
         : (lastSegments ? `<div class="job-text">${lastSegments}</div>` : '')}
       ${resultBlock}
@@ -920,7 +1161,12 @@
   function copyTranscript(id) {
     const job = jobs[id];
     if (!job) return;
-    const text = job.segments.map(s => s.text.trim()).filter(Boolean).join('\n');
+    const hasSpeakers = job.segments.some(s => s.speaker);
+    const text = job.segments.map(s => {
+      const t = s.text.trim();
+      if (!t) return '';
+      return hasSpeakers ? `[${(s.speaker || 'SPEAKER_0').replace('SPEAKER_', 'S')}] ${t}` : t;
+    }).filter(Boolean).join('\n');
     navigator.clipboard.writeText(text || '').then(() => dbg('текст скопирован', 'ok')).catch(() => {});
   }
 
@@ -961,7 +1207,7 @@
     job.startTime = Date.now();
     renderJob(id);
     const s = loadSettings();
-    _startOrQueue(id, job.input, s.output, s.model, s.language);
+    _startOrQueue(id, job.input, s.output, s.model, s.language, s.diarize, s.speakers);
   }
 
   // ── Tauri events ──────────────────────────────────────────────────────
@@ -969,6 +1215,12 @@
     const payload = raw.payload ?? raw;
     const { id, data } = payload;
     dbg(`event: id=${id} type=${data?.type} pct=${data?.percent ?? ''}`);
+
+    // Welcome screen: перехватываем события скачивания модели
+    if (id === _WELCOME_JOB_ID) {
+      handleWelcomeEvent(data);
+      return;
+    }
 
     // GPU info — глобальное событие, не привязано к карточке
     if (data.type === 'gpu_info') {
@@ -1040,7 +1292,7 @@
       const id    = String(Date.now() + Math.random());
       const name  = filePath.replace(/\\/g, '/').split('/').pop();
       addJob(id, name, filePath);
-      _startOrQueue(id, filePath, s.output, s.model, s.language);
+      _startOrQueue(id, filePath, s.output, s.model, s.language, s.diarize, s.speakers);
       if (!_tauriAvail) mockProgress(id, name);
     });
   }
@@ -1061,7 +1313,7 @@
     const label = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
     addJob(id, label, url);
     const s = loadSettings();
-    _startOrQueue(id, url, s.output, s.model, s.language);
+    _startOrQueue(id, url, s.output, s.model, s.language, s.diarize, s.speakers);
     if (!_tauriAvail) mockProgress(id, label);
     input.value = '';
   }
@@ -1104,6 +1356,28 @@
     return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // Цвета спикеров: S0=фиолетовый, S1=зелёный, S2=оранжевый, S3=розовый
+  const _SPEAKER_COLORS = [
+    { bg: 'rgba(124,106,247,0.18)', color: '#a99fff' },
+    { bg: 'rgba(74,222,128,0.15)',  color: '#4ade80' },
+    { bg: 'rgba(251,146,60,0.18)',  color: '#fb923c' },
+    { bg: 'rgba(244,114,182,0.18)', color: '#f472b6' },
+    { bg: 'rgba(250,204,21,0.18)',  color: '#facc15' },
+    { bg: 'rgba(56,189,248,0.18)',  color: '#38bdf8' },
+  ];
+
+  function _speakerLabel(raw) {
+    // "SPEAKER_0" → "S0", "SPEAKER_1" → "S1", etc.
+    if (!raw) return null;
+    return raw.replace('SPEAKER_', 'S');
+  }
+
+  function _speakerColor(raw) {
+    if (!raw) return null;
+    const idx = parseInt(raw.replace(/\D/g, '') || '0', 10);
+    return _SPEAKER_COLORS[idx % _SPEAKER_COLORS.length];
+  }
+
   function openViewer(id) {
     const job = jobs[id];
     if (!job) return;
@@ -1113,12 +1387,19 @@
     if (!job.segments.length) {
       body.innerHTML = '<div class="viewer-empty">Нет сегментов</div>';
     } else {
-      body.innerHTML = job.segments.map(seg =>
-        `<div class="viewer-seg">
+      const hasSpeakers = job.segments.some(s => s.speaker);
+      body.innerHTML = job.segments.map(seg => {
+        const label = _speakerLabel(seg.speaker);
+        const col   = _speakerColor(seg.speaker);
+        const spkBadge = (hasSpeakers && label && col)
+          ? `<span class="viewer-speaker" style="background:${col.bg};color:${col.color}">${label}</span>`
+          : '';
+        return `<div class="viewer-seg">
           <span class="viewer-ts" onclick="navigator.clipboard.writeText('${fmtTs(seg.start)}')" title="Копировать метку">[${fmtTs(seg.start)}]</span>
+          ${spkBadge}
           <span class="viewer-text">${escHtml(seg.text.trim())}</span>
-        </div>`
-      ).join('');
+        </div>`;
+      }).join('');
     }
     document.getElementById('viewer-overlay').classList.add('open');
   }
@@ -1131,7 +1412,14 @@
   function copyAllText() {
     const job = _viewerJobId ? jobs[_viewerJobId] : null;
     if (!job) return;
-    const text = job.segments.map(s => s.text.trim()).filter(Boolean).join('\n');
+    const hasSpeakers = job.segments.some(s => s.speaker);
+    const text = job.segments.map(s => {
+      const t = s.text.trim();
+      if (!t) return '';
+      const ts = `[${fmtTs(s.start)}]`;
+      const spk = hasSpeakers ? ` [${_speakerLabel(s.speaker) || 'S?'}]` : '';
+      return `${ts}${spk} ${t}`;
+    }).filter(Boolean).join('\n');
     navigator.clipboard.writeText(text).then(() => dbg('текст скопирован', 'ok')).catch(() => {});
   }
 
@@ -1204,6 +1492,10 @@
     if (e.ctrlKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); }
     if (e.key === 'Escape') { closePalette(); closeSettings(); closeViewer(); }
   });
+
+  // ── Инициализация ─────────────────────────────────────────────────────
+  // Грузим настройки, потом проверяем первый запуск
+  initSettings().then(() => checkFirstRun());
 </script>
 </body>
 </html>

@@ -12,10 +12,19 @@ python/.venv/
 python/venv/
 *.egg-info/
 
+# Build binaries (скачиваются через fetch_bins.ps1, не коммитятся)
+python/bin/
+python/dist/
+python/build/
+
 # Output & temp
 output/
 *.partial.json
 *.wav
+*.diar.json
+python/test_output/
+python/test_diarizer_module.py
+python/test_diarization.py
 
 # IDE
 .vscode/

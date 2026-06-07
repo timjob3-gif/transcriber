@@ -1,4 +1,4 @@
-"""Логгер транскрибатора. Пишет в %APPDATA%/transcriber/transcriber.log"""
+"""Логгер транскрибатора. Пишет в %APPDATA%/Transcriber/transcriber.log"""
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -11,7 +11,7 @@ def setup() -> logging.Logger:
         return log
     log.setLevel(logging.DEBUG)
 
-    log_dir = Path(os.environ.get("APPDATA", Path.home())) / "transcriber"
+    log_dir = Path(os.environ.get("APPDATA", Path.home())) / "Transcriber"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "transcriber.log"
 

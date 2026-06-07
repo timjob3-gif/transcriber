@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Транскрибатор",
-  "version": "0.1.0",
-  "identifier": "ru.transcriber.app",
+  "version": "1.0.1",
+  "identifier": "Transcriber",
   "build": {
     "frontendDist": "../src"
   },
@@ -21,6 +21,18 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "resources": {
+      "../python/dist/transcriber-core.exe": "."
+    },
+    "publisher": "timjob3-gif",
+    "windows": {
+      "nsis": {
+        "languages": ["Russian"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
