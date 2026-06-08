@@ -863,26 +863,6 @@
         </div>
       </div>
 
-      <div class="settings-group-label">— Голоса —</div>
-      <div class="settings-row">
-        <label>Определение спикеров</label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);text-transform:none;letter-spacing:normal;">
-          <input type="checkbox" id="set-diarize" style="width:16px;height:16px;accent-color:var(--accent);" onchange="document.getElementById('row-speakers').style.display=this.checked?'flex':'none'" />
-          Разделять голоса участников разговора
-        </label>
-        <span style="font-size:11px;color:var(--muted);">Прибавляет ~30 сек к обработке. Работает без интернета.</span>
-      </div>
-      <div class="settings-row" id="row-speakers" style="display:none">
-        <label>Количество участников</label>
-        <select id="set-speakers">
-          <option value="0">Авто (определится автоматически)</option>
-          <option value="2">2 участника</option>
-          <option value="3">3 участника</option>
-          <option value="4">4 участника</option>
-          <option value="5">5 участников</option>
-          <option value="6">6 участников</option>
-        </select>
-      </div>
 
     </div>
     <div class="settings-footer">
@@ -1011,28 +991,22 @@
 
   // ── Settings (persistent via tauri-plugin-store) ─────────────────────
   // Глобальный объект — грузится один раз при старте из store/localStorage
-  let _settings = { model: 'base', language: '', output: '', diarize: false, speakers: 0 };
+  let _settings = { model: 'base', language: '', output: '' };
 
   async function initSettings() {
     if (_tauriAvail) {
       const model    = await tauriInvoke('get_setting', { key: 'model' });
       const lang     = await tauriInvoke('get_setting', { key: 'language' });
       const output   = await tauriInvoke('get_setting', { key: 'output' });
-      const diarize  = await tauriInvoke('get_setting', { key: 'diarize' });
-      const speakers = await tauriInvoke('get_setting', { key: 'speakers' });
-      if (model    != null) _settings.model    = model;
-      if (lang     != null) _settings.language = lang;
-      if (output   != null) _settings.output   = output;
-      if (diarize  != null) _settings.diarize  = !!diarize;
-      if (speakers != null) _settings.speakers = Number(speakers) || 0;
+      if (model  != null) _settings.model    = model;
+      if (lang   != null) _settings.language = lang;
+      if (output != null) _settings.output   = output;
     } else {
       _settings.model    = localStorage.getItem('model')    || 'base';
       _settings.language = localStorage.getItem('language') || '';
       _settings.output   = localStorage.getItem('output')   || '';
-      _settings.diarize  = localStorage.getItem('diarize')  === 'true';
-      _settings.speakers = Number(localStorage.getItem('speakers')) || 0;
     }
-    dbg('settings loaded: model=' + _settings.model + ' diarize=' + _settings.diarize + ' speakers=' + _settings.speakers);
+    dbg('settings loaded: model=' + _settings.model);
   }
 
   function loadSettings() { return { ..._settings }; }
@@ -1042,9 +1016,6 @@
     document.getElementById('set-model').value    = s.model;
     document.getElementById('set-language').value = s.language;
     document.getElementById('set-output').value   = s.output;
-    document.getElementById('set-diarize').checked = !!s.diarize;
-    document.getElementById('set-speakers').value  = String(s.speakers || 0);
-    document.getElementById('row-speakers').style.display = s.diarize ? 'flex' : 'none';
     document.getElementById('settings-overlay').classList.add('open');
   }
   function closeSettings() {
@@ -1054,23 +1025,17 @@
     _settings.model    = document.getElementById('set-model').value;
     _settings.language = document.getElementById('set-language').value;
     _settings.output   = document.getElementById('set-output').value.trim();
-    _settings.diarize  = document.getElementById('set-diarize').checked;
-    _settings.speakers = Number(document.getElementById('set-speakers').value) || 0;
     if (_tauriAvail) {
       await tauriInvoke('set_setting', { key: 'model',    value: _settings.model });
       await tauriInvoke('set_setting', { key: 'language', value: _settings.language });
       await tauriInvoke('set_setting', { key: 'output',   value: _settings.output });
-      await tauriInvoke('set_setting', { key: 'diarize',  value: _settings.diarize });
-      await tauriInvoke('set_setting', { key: 'speakers', value: _settings.speakers });
     } else {
       localStorage.setItem('model',    _settings.model);
       localStorage.setItem('language', _settings.language);
       localStorage.setItem('output',   _settings.output);
-      localStorage.setItem('diarize',  String(_settings.diarize));
-      localStorage.setItem('speakers', String(_settings.speakers));
     }
     closeSettings();
-    dbg('settings saved: model=' + _settings.model + ' diarize=' + _settings.diarize + ' speakers=' + _settings.speakers, 'ok');
+    dbg('settings saved: model=' + _settings.model, 'ok');
   }
   async function browseOutputFolder() {
     const path = await tauriInvoke('pick_folder');
@@ -1181,7 +1146,7 @@
   }
 
   function addJob(id, name, inputPath) {
-    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {}, jobDiarize: !!_settings.diarize, jobSpeakers: _settings.speakers || 0 };
+    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {}, jobDiarize: false, jobSpeakers: 0 };
     renderJob(id);
     document.getElementById('drop-zone').classList.add('compact');
     _updateStartAllBtn();
