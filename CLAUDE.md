@@ -1,4 +1,9 @@
 
+## Правила проекта
+
+- **Версии**: перед каждой сборкой (`npm run tauri build`) поднимать patch-версию в ОБОИХ файлах: `src-tauri/tauri.conf.json` и `src-tauri/Cargo.toml`.
+- **CHANGELOG.md**: обновлять при каждом событии — локальная пересборка, коммит, `gh release create`. Добавлять новую запись в начало файла с версией, датой и кратким описанием изменений.
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
