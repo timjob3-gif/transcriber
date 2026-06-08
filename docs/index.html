@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Транскрибатор — перевод речи в текст без интернета</title>
+  <meta name="description" content="Бесплатная программа для расшифровки аудио и видео. Работает офлайн, ничего не уходит в облако. Для Windows." />
+
+  <!-- OG / Telegram preview -->
+  <meta property="og:title" content="Транскрибатор — расшифровка речи без интернета" />
+  <meta property="og:description" content="Перетащи файл — получи текст. Бесплатно, офлайн, без регистрации." />
+  <meta property="og:type" content="website" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0e0e0e;
+      --surface: #1a1a1a;
+      --border:  #2a2a2a;
+      --accent:  #7c6af7;
+      --accent2: #a090ff;
+      --text:    #e8e8e8;
+      --muted:   #888;
+      --success: #4ade80;
+      --radius:  12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Golos Text', 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* ── Шапка ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 40px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(14,14,14,0.92);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+    }
+    .logo {
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.3px;
+    }
+    .logo span { color: var(--accent); }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    nav a:hover { color: var(--text); }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
+
+    /* ── Контейнер ── */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 96px 24px 72px;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(124,106,247,0.15);
+      border: 1px solid rgba(124,106,247,0.35);
+      color: var(--accent2);
+      font-size: 13px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 58px);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      margin-bottom: 22px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    .hero-sub {
+      font-size: 19px;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      line-height: 1.5;
+    }
+    .hero-cta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      padding: 16px 36px;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: 600;
+      transition: opacity 0.2s, transform 0.15s;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-download:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-download:active { transform: translateY(0); }
+    .btn-download svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .download-meta {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .download-meta span { color: var(--text); }
+
+    /* Ошибка загрузки */
+    .download-err {
+      display: none;
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 360px;
+      text-align: center;
+    }
+    .download-err a { color: var(--accent2); }
+
+    /* ── Превью-скриншот ── */
+    .hero-screenshot {
+      margin: 60px auto 0;
+      max-width: 760px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    }
+    .screenshot-mock {
+      background: var(--surface);
+      padding: 24px;
+      text-align: left;
+    }
+    .mock-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .mock-logo { font-weight: 600; font-size: 14px; }
+    .mock-logo span { color: var(--accent); }
+    .mock-chips { display: flex; gap: 8px; }
+    .mock-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .mock-drop {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .mock-job {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .mock-job-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .mock-job-status { color: var(--success); font-size: 12px; }
+    .mock-bar {
+      height: 3px;
+      background: var(--success);
+      border-radius: 2px;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .mock-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mock-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 9px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Раздел "Как это работает" ── */
+    .section { padding: 80px 0; }
+    .section-label {
+      text-align: center;
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .section h2 {
+      text-align: center;
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 56px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+    }
+    .step-num {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(124,106,247,0.15);
+      border: 1px solid rgba(124,106,247,0.3);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .step p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Фичи ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 22px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .feature-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      margin-top: 2px;
+    }
+    .feature h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .feature p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+
+    /* ── Форматы ── */
+    .formats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .format-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .format-ext {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: 'Consolas', monospace;
+      margin-bottom: 6px;
+    }
+    .format-desc {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── CTA внизу ── */
+    .cta-bottom {
+      text-align: center;
+      padding: 80px 24px 100px;
+      border-top: 1px solid var(--border);
+    }
+    .cta-bottom h2 {
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+    .cta-bottom p {
+      color: var(--muted);
+      font-size: 17px;
+      margin-bottom: 36px;
+    }
+
+    /* ── SmartScreen блок ── */
+    .smartscreen {
+      max-width: 600px;
+      margin: 0 auto;
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.25);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-size: 14px;
+      color: #fbbf24;
+      line-height: 1.6;
+      text-align: left;
+      margin-top: 32px;
+    }
+    .smartscreen strong { color: #fde68a; }
+
+    /* ── Подвал ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 24px; }
+
+    /* ── Разделитель ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Адаптив ── */
+    @media (max-width: 680px) {
+      nav { padding: 14px 20px; }
+      .nav-links { gap: 16px; }
+      .hero { padding: 60px 20px 48px; }
+      .steps { grid-template-columns: 1fr; }
+      .features { grid-template-columns: 1fr; }
+      .formats-grid { grid-template-columns: repeat(2, 1fr); }
+      footer { padding: 20px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Шапка ── -->
+<nav>
+  <div class="logo"><span>◈</span> Транскрибатор</div>
+  <div class="nav-links">
+    <a href="#features">Функции</a>
+    <a href="#how">Как работает</a>
+    <a href="#download">Скачать</a>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-badge">Бесплатно · Без регистрации · Windows 10/11</div>
+  <h1>Любое аудио и видео —<br>в <em>текст</em></h1>
+  <p class="hero-sub">
+    Перетащи файл, нажми кнопку — и получишь расшифровку.
+    Всё происходит прямо на твоём компьютере, ничего никуда не уходит.
+  </p>
+  <div class="hero-cta">
+    <a class="btn-download" id="dl-btn" href="#" download>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Скачать для Windows
+    </a>
+    <div class="download-meta" id="dl-meta">
+      <span id="dl-version">версия 1.0.4</span> · Windows 10/11 · ~200 МБ
+    </div>
+    <div class="download-err" id="dl-err">
+      Не удалось загрузить ссылку. <a href="https://github.com/timjob3-gif/transcriber/releases/latest" style="color:var(--accent)">Открыть страницу загрузки →</a>
+    </div>
+  </div>
+
+  <!-- Псевдо-скриншот приложения -->
+  <div class="hero-screenshot">
+    <div class="screenshot-mock">
+      <div class="mock-header">
+        <div class="mock-logo"><span>◈</span> Транскрибатор</div>
+        <div class="mock-chips">
+          <div class="mock-chip">⚙️</div>
+          <div class="mock-chip">🕓</div>
+          <div class="mock-chip" style="color:#4ade80;border-color:rgba(74,222,128,0.3)">⬤ GPU RTX</div>
+        </div>
+      </div>
+      <div class="mock-drop">🎬 Перетащи файл сюда или вставь YouTube-ссылку</div>
+      <div class="mock-job">
+        <div class="mock-job-top">
+          <span>интервью_с_экспертом.mp4</span>
+          <span class="mock-job-status">✓ Готово · 02:14</span>
+        </div>
+        <div class="mock-bar"></div>
+        <div class="mock-btns">
+          <div class="mock-btn">👁 Читать</div>
+          <div class="mock-btn">📋 Скопировать</div>
+          <div class="mock-btn">TXT</div>
+          <div class="mock-btn">SRT</div>
+          <div class="mock-btn">VTT</div>
+          <div class="mock-btn">📂 Папка</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Как работает ── -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-label">Три шага</div>
+    <h2>Проще, чем кажется</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Добавь файл</h3>
+        <p>Перетащи видео или аудио прямо в окно программы. Или вставь ссылку на YouTube — программа сама скачает и расшифрует.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Нажми «Начать»</h3>
+        <p>Программа сама разберёт речь в текст. Всё работает на твоём компьютере — интернет не нужен, данные никуда не уходят.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Забери результат</h3>
+        <p>Готовый текст — в одно нажатие в буфер обмена. Или сохрани как TXT, SRT для видеоредактора, или VTT для сайта.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Функции ── -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-label">Возможности</div>
+    <h2>Всё, что нужно для работы</h2>
+    <div class="features">
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <div>
+          <h3>Твои файлы остаются у тебя</h3>
+          <p>Никаких облаков, серверов и загрузок. Расшифровка происходит прямо на твоём компьютере. Нет интернета — нет проблем, программа всё равно работает.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+        <div>
+          <h3>YouTube без лишних шагов</h3>
+          <p>Скопируй ссылку на видео, вставь в программу — она сама скачает аудио и превратит его в текст. Больше не нужно сначала скачивать видео, потом конвертировать.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div>
+          <h3>Кто что говорил</h3>
+          <p>Если в записи несколько человек, программа разделит их голоса и подпишет каждую реплику: «Спикер 1», «Спикер 2». Потом можно вписать настоящие имена — и текст станет читаться как стенограмма. Эту функцию называют диаризацией, но по сути это просто умное разделение по голосам.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div>
+          <h3>Текст с временными метками</h3>
+          <p>Каждый абзац помечен временем: [00:34], [01:12]. Кликни на метку — она скопируется. Удобно, когда нужно найти нужный момент в записи.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></div>
+        <div>
+          <h3>Выбери модель под свои задачи</h3>
+          <p>В программе четыре модели распознавания — от лёгкой до максимальной. Лёгкая занимает меньше места на диске и работает быстрее, но иногда ошибается на тихой речи или сложном акценте. Максимальная распознаёт точнее, зато требует больше места (~3 ГБ) и времени на обработку. Какая подойдёт — зависит от твоего компьютера и задачи.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+        <div>
+          <h3>Любой язык без настройки</h3>
+          <p>Программа сама определяет язык записи. Работает с русским, английским, украинским, немецким, французским, испанским и ещё десятками языков.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+        <div>
+          <h3>Несколько файлов за один раз</h3>
+          <p>Добавь сколько угодно записей и нажми «Запустить все». Программа обработает их по очереди, пока ты занимаешься другими делами. Каждый файл — в отдельной карточке с прогрессом.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#a090ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg></div>
+        <div>
+          <h3>История всех расшифровок</h3>
+          <p>Старые результаты никуда не пропадают. В истории можно найти любую прошлую расшифровку, прочитать текст и скопировать нужное.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Форматы ── -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">Форматы</div>
+    <h2>Принимает всё, что у тебя есть</h2>
+    <div class="formats-grid">
+      <div class="format-card">
+        <div class="format-ext">MP4</div>
+        <div class="format-desc">Видео</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">MKV</div>
+        <div class="format-desc">Видео</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">AVI</div>
+        <div class="format-desc">Видео</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">MOV</div>
+        <div class="format-desc">Видео</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">MP3</div>
+        <div class="format-desc">Аудио</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">WAV</div>
+        <div class="format-desc">Аудио</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">M4A</div>
+        <div class="format-desc">Аудио</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">FLAC</div>
+        <div class="format-desc">Аудио</div>
+      </div>
+    </div>
+
+    <br /><br />
+
+    <div class="section-label" style="margin-bottom:14px">Результат сохраняется в</div>
+    <div class="formats-grid" style="grid-template-columns: repeat(3,1fr)">
+      <div class="format-card">
+        <div class="format-ext">TXT</div>
+        <div class="format-desc">Чистый текст — удобно скопировать или открыть в Word</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">SRT</div>
+        <div class="format-desc">Субтитры для видеоредактора (Premiere, DaVinci, CapCut)</div>
+      </div>
+      <div class="format-card">
+        <div class="format-ext">VTT</div>
+        <div class="format-desc">Субтитры для сайта или YouTube</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── CTA внизу ── -->
+<section class="cta-bottom" id="download">
+  <h2>Попробуй прямо сейчас</h2>
+  <p>Бесплатно. Без регистрации. Один раз установил — пользуйся всегда.</p>
+  <a class="btn-download" id="dl-btn-2" href="#" download>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    Скачать для Windows
+  </a>
+
+  <div class="smartscreen">
+    ⚠ <strong>Первый запуск:</strong> Windows может показать предупреждение SmartScreen — это нормально для новых программ без платного сертификата.
+    Нажми <strong>«Подробнее»</strong>, затем <strong>«Выполнить в любом случае»</strong> — и программа откроется.
+  </div>
+</section>
+
+<!-- ── Подвал ── -->
+<footer>
+  <div>© 2026 Транскрибатор · Открытый исходный код</div>
+  <div class="footer-links">
+    <a href="https://github.com/timjob3-gif/transcriber">GitHub</a>
+    <a href="https://github.com/timjob3-gif/transcriber/issues">Обратная связь</a>
+    <a href="privacy.html">Конфиденциальность</a>
+  </div>
+</footer>
+
+<script>
+  // Прямая ссылка на установщик v1.0.4
+  // При выходе новой версии: обновить EXE_URL и VERSION
+  const EXE_URL = 'https://github.com/timjob3-gif/transcriber/releases/download/v1.0.4/_1.0.4_x64-setup.exe';
+  const VERSION = 'v1.0.4';
+
+  function setDownload() {
+    document.getElementById('dl-btn').href   = EXE_URL;
+    document.getElementById('dl-btn-2').href = EXE_URL;
+
+    const meta = document.getElementById('dl-meta');
+    if (meta) meta.innerHTML = `<span>${VERSION}</span> · Windows 10/11 · ~200 МБ`;
+
+    const errEl = document.getElementById('dl-err');
+    if (errEl) errEl.style.display = 'none';
+  }
+
+  setDownload();
+</script>
+
+</body>
+</html>
