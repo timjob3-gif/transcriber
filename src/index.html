@@ -1146,7 +1146,7 @@
   }
 
   function addJob(id, name, inputPath) {
-    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, lastSegEnd: 0, speed: null, speakerNames: {}, jobDiarize: false, jobSpeakers: 0 };
+    jobs[id] = { id, name, input: inputPath || '', percent: 0, status: 'pending', stage: null, segments: [], outputPath: null, txtPath: null, srtPath: null, vttPath: null, errorMsg: null, startTime: Date.now(), transcribeStart: null, diarizingStart: null, lastSegEnd: 0, speed: null, speakerNames: {}, jobDiarize: false, jobSpeakers: 0 };
     renderJob(id);
     document.getElementById('drop-zone').classList.add('compact');
     _updateStartAllBtn();
@@ -1172,6 +1172,15 @@
         txt += `  <span class="job-eta">ETA ${fmtTime(etaSec)}</span>`;
       }
       el.innerHTML = txt;
+
+      // Счётчик времени диаризации
+      if (job.stage === 'diarizing' && job.diarizingStart) {
+        const dEl = document.getElementById('diarizing-timer-' + job.id);
+        if (dEl) {
+          const dsec = Math.floor((Date.now() - job.diarizingStart) / 1000);
+          dEl.textContent = fmtTime(dsec);
+        }
+      }
     });
   }, 1000);
 
@@ -1242,7 +1251,7 @@
         <div class="progress-fill" style="width:${pct}%; background:${fillColor}"></div>
       </div>
       ${job.stage === 'loading_model' ? `<div class="job-stage-loading">⏳ Загружается модель…</div>` : ''}
-      ${job.stage === 'diarizing' ? `<div class="job-stage-loading">🎤 Определяю спикеров…</div>` : ''}
+      ${job.stage === 'diarizing' ? `<div class="job-stage-loading">🎤 Определяю спикеров… <span id="diarizing-timer-${id}" style="font-variant-numeric:tabular-nums;font-family:'Consolas',monospace"></span> <span style="opacity:0.55;font-size:10px">(на CPU ~1–3 мин)</span></div>` : ''}
       ${job.status === 'pending' ? `
         <div class="job-pending-row">
           <label class="job-cb-label">
@@ -1285,6 +1294,9 @@
     if (!job || job.status !== 'pending') return;
     const s = _settings;
     job.startTime = Date.now();
+    // Сразу убираем staging-строку — визуальный отклик до первого события от Python
+    job.status = 'running';
+    renderJob(id);
     _startOrQueue(id, job.input, s.output, s.model, s.language, !!job.jobDiarize, job.jobSpeakers || 0);
     _updateStartAllBtn();
   }
@@ -1410,6 +1422,9 @@
       job.stage   = data.stage || null;
       if (data.stage === 'transcribing' && !job.transcribeStart) {
         job.transcribeStart = Date.now();
+      }
+      if (data.stage === 'diarizing' && !job.diarizingStart) {
+        job.diarizingStart = Date.now();
       }
     }
     if (data.type === 'segment')  { job.segments.push(data); job.lastSegEnd = data.end || 0; }
@@ -1547,7 +1562,10 @@
       body.innerHTML = '<div class="viewer-empty">Нет сегментов</div>';
     } else {
       const hasSpeakers = job.segments.some(s => s.speaker);
-      body.innerHTML = job.segments.map(seg => {
+      const speakerHint = hasSpeakers
+        ? `<div style="padding:6px 16px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);opacity:0.7">✏️ Двойной клик на имени спикера — переименовать</div>`
+        : '';
+      body.innerHTML = speakerHint + job.segments.map(seg => {
         const label = _speakerLabel(seg.speaker, id);
         const col   = _speakerColor(seg.speaker);
         const spkBadge = (hasSpeakers && seg.speaker && col)
